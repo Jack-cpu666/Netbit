@@ -538,8 +538,12 @@ HTML_TEMPLATE = '''
             }
         }
 
-        // Mouse and keyboard handling for live monitor
-        document.getElementById('liveScreen').addEventListener('click', function(e) {
+        // Enhanced mouse and keyboard handling for live monitor
+        const liveScreen = document.getElementById('liveScreen');
+        let isMouseOverScreen = false;
+
+        // Mouse move tracking
+        liveScreen.addEventListener('mousemove', function(e) {
             if (liveMonitorActive) {
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -550,11 +554,191 @@ HTML_TEMPLATE = '''
                 const scaleY = this.naturalHeight / this.offsetHeight;
 
                 socket.emit('remote_mouse_action', {
-                    action: 'click',
+                    action: 'move',
+                    x: Math.round(x * scaleX),
+                    y: Math.round(y * scaleY)
+                });
+            }
+        });
+
+        // Mouse enter/leave tracking
+        liveScreen.addEventListener('mouseenter', function() {
+            isMouseOverScreen = true;
+        });
+
+        liveScreen.addEventListener('mouseleave', function() {
+            isMouseOverScreen = false;
+        });
+
+        // Mouse click handling
+        liveScreen.addEventListener('mousedown', function(e) {
+            if (liveMonitorActive) {
+                e.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const scaleX = this.naturalWidth / this.offsetWidth;
+                const scaleY = this.naturalHeight / this.offsetHeight;
+
+                const button = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
+
+                socket.emit('remote_mouse_action', {
+                    action: 'press',
+                    x: Math.round(x * scaleX),
+                    y: Math.round(y * scaleY),
+                    button: button
+                });
+            }
+        });
+
+        liveScreen.addEventListener('mouseup', function(e) {
+            if (liveMonitorActive) {
+                e.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const scaleX = this.naturalWidth / this.offsetWidth;
+                const scaleY = this.naturalHeight / this.offsetHeight;
+
+                const button = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
+
+                socket.emit('remote_mouse_action', {
+                    action: 'release',
+                    x: Math.round(x * scaleX),
+                    y: Math.round(y * scaleY),
+                    button: button
+                });
+            }
+        });
+
+        // Double click handling
+        liveScreen.addEventListener('dblclick', function(e) {
+            if (liveMonitorActive) {
+                e.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const scaleX = this.naturalWidth / this.offsetWidth;
+                const scaleY = this.naturalHeight / this.offsetHeight;
+
+                socket.emit('remote_mouse_action', {
+                    action: 'double_click',
                     x: Math.round(x * scaleX),
                     y: Math.round(y * scaleY),
                     button: 'left'
                 });
+            }
+        });
+
+        // Mouse wheel handling
+        liveScreen.addEventListener('wheel', function(e) {
+            if (liveMonitorActive) {
+                e.preventDefault();
+                const rect = this.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const scaleX = this.naturalWidth / this.offsetWidth;
+                const scaleY = this.naturalHeight / this.offsetHeight;
+
+                socket.emit('remote_mouse_action', {
+                    action: 'scroll',
+                    x: Math.round(x * scaleX),
+                    y: Math.round(y * scaleY),
+                    delta: -e.deltaY / 100
+                });
+            }
+        });
+
+        // Disable context menu on live screen
+        liveScreen.addEventListener('contextmenu', function(e) {
+            if (liveMonitorActive) {
+                e.preventDefault();
+            }
+        });
+
+        // Global keyboard handling when live monitor is active and mouse is over screen
+        document.addEventListener('keydown', function(e) {
+            if (liveMonitorActive && isMouseOverScreen) {
+                e.preventDefault();
+
+                let keyName = e.key;
+
+                // Handle special key combinations
+                if (e.ctrlKey && e.key === 'c') {
+                    keyName = 'Ctrl+C';
+                } else if (e.ctrlKey && e.key === 'v') {
+                    keyName = 'Ctrl+V';
+                } else if (e.ctrlKey && e.key === 'a') {
+                    keyName = 'Ctrl+A';
+                } else if (e.altKey && e.key === 'Tab') {
+                    keyName = 'Alt+Tab';
+                } else if (e.key === 'Enter') {
+                    keyName = 'Enter';
+                } else if (e.key === 'Backspace') {
+                    keyName = 'Backspace';
+                } else if (e.key === 'Delete') {
+                    keyName = 'Delete';
+                } else if (e.key === 'Tab') {
+                    keyName = 'Tab';
+                } else if (e.key === 'Escape') {
+                    keyName = 'Escape';
+                } else if (e.key === 'ArrowUp') {
+                    keyName = 'Up';
+                } else if (e.key === 'ArrowDown') {
+                    keyName = 'Down';
+                } else if (e.key === 'ArrowLeft') {
+                    keyName = 'Left';
+                } else if (e.key === 'ArrowRight') {
+                    keyName = 'Right';
+                } else if (e.key === ' ') {
+                    keyName = 'Space';
+                }
+
+                socket.emit('remote_keyboard_action', {
+                    action: 'press',
+                    key: keyName,
+                    ctrl: e.ctrlKey,
+                    alt: e.altKey,
+                    shift: e.shiftKey
+                });
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            if (liveMonitorActive && isMouseOverScreen) {
+                e.preventDefault();
+
+                let keyName = e.key;
+                if (e.key === 'Enter') keyName = 'Enter';
+                else if (e.key === 'Backspace') keyName = 'Backspace';
+                else if (e.key === 'Tab') keyName = 'Tab';
+
+                socket.emit('remote_keyboard_action', {
+                    action: 'release',
+                    key: keyName,
+                    ctrl: e.ctrlKey,
+                    alt: e.altKey,
+                    shift: e.shiftKey
+                });
+            }
+        });
+
+        // Handle typing
+        document.addEventListener('keypress', function(e) {
+            if (liveMonitorActive && isMouseOverScreen) {
+                e.preventDefault();
+
+                // Only send printable characters
+                if (e.charCode >= 32 && e.charCode <= 126) {
+                    socket.emit('remote_keyboard_action', {
+                        action: 'type',
+                        char: e.key
+                    });
+                }
             }
         });
 
