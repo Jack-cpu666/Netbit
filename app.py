@@ -287,4 +287,9 @@ websocket_thread.start()
 if __name__ == '__main__':
     print("Starting Flask app...")
     print("WebSocket server will listen on port 8765 for local clients")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+
+    # Use the PORT environment variable provided by Render
+    import os
+    port = int(os.environ.get('PORT', 5000))
+
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
