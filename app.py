@@ -300,6 +300,8 @@ HTML_TEMPLATE = '''
                 <button onclick="startLiveMonitor()" class="btn btn-success">Start Live Monitor</button>
                 <button onclick="stopLiveMonitor()" class="btn btn-danger">Stop Live Monitor</button>
                 <span id="liveMonitorStatus" class="monitor-off">Monitor: OFF</span>
+                <button onclick="toggleMouseKeyboard()" id="mouseKeyboardToggle" class="btn" style="margin-left: 20px;">🖱️ Mouse/Keyboard: ON</button>
+                <span id="controlStatus" class="monitor-on" style="margin-left: 10px;">Control Enabled</span>
             </div>
             <div class="monitor-container">
                 <img id="liveScreen" class="screen" style="display: none;" alt="Live Screen">
@@ -332,6 +334,7 @@ HTML_TEMPLATE = '''
     <script>
         const socket = io();
         let liveMonitorActive = false;
+        let mouseKeyboardEnabled = true;
         let screenshots = {};
 
         // Socket events
@@ -463,6 +466,24 @@ HTML_TEMPLATE = '''
             document.getElementById('liveMonitorStatus').className = 'monitor-off';
         }
 
+        function toggleMouseKeyboard() {
+            mouseKeyboardEnabled = !mouseKeyboardEnabled;
+            const button = document.getElementById('mouseKeyboardToggle');
+            const status = document.getElementById('controlStatus');
+
+            if (mouseKeyboardEnabled) {
+                button.textContent = '🖱️ Mouse/Keyboard: ON';
+                button.className = 'btn btn-success';
+                status.textContent = 'Control Enabled';
+                status.className = 'monitor-on';
+            } else {
+                button.textContent = '🖱️ Mouse/Keyboard: OFF';
+                button.className = 'btn btn-danger';
+                status.textContent = 'View Only Mode';
+                status.className = 'monitor-off';
+            }
+        }
+
         // Screenshot functions
         function takeScreenshot() {
             socket.emit('take_screenshot', {});
@@ -544,7 +565,7 @@ HTML_TEMPLATE = '''
 
         // Mouse move tracking
         liveScreen.addEventListener('mousemove', function(e) {
-            if (liveMonitorActive) {
+            if (liveMonitorActive && mouseKeyboardEnabled) {
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
@@ -572,7 +593,7 @@ HTML_TEMPLATE = '''
 
         // Mouse click handling
         liveScreen.addEventListener('mousedown', function(e) {
-            if (liveMonitorActive) {
+            if (liveMonitorActive && mouseKeyboardEnabled) {
                 e.preventDefault();
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -593,7 +614,7 @@ HTML_TEMPLATE = '''
         });
 
         liveScreen.addEventListener('mouseup', function(e) {
-            if (liveMonitorActive) {
+            if (liveMonitorActive && mouseKeyboardEnabled) {
                 e.preventDefault();
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -615,7 +636,7 @@ HTML_TEMPLATE = '''
 
         // Double click handling
         liveScreen.addEventListener('dblclick', function(e) {
-            if (liveMonitorActive) {
+            if (liveMonitorActive && mouseKeyboardEnabled) {
                 e.preventDefault();
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -635,7 +656,7 @@ HTML_TEMPLATE = '''
 
         // Mouse wheel handling
         liveScreen.addEventListener('wheel', function(e) {
-            if (liveMonitorActive) {
+            if (liveMonitorActive && mouseKeyboardEnabled) {
                 e.preventDefault();
                 const rect = this.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -662,7 +683,7 @@ HTML_TEMPLATE = '''
 
         // Global keyboard handling when live monitor is active and mouse is over screen
         document.addEventListener('keydown', function(e) {
-            if (liveMonitorActive && isMouseOverScreen) {
+            if (liveMonitorActive && isMouseOverScreen && mouseKeyboardEnabled) {
                 e.preventDefault();
 
                 let keyName = e.key;
@@ -709,7 +730,7 @@ HTML_TEMPLATE = '''
         });
 
         document.addEventListener('keyup', function(e) {
-            if (liveMonitorActive && isMouseOverScreen) {
+            if (liveMonitorActive && isMouseOverScreen && mouseKeyboardEnabled) {
                 e.preventDefault();
 
                 let keyName = e.key;
@@ -729,7 +750,7 @@ HTML_TEMPLATE = '''
 
         // Handle typing
         document.addEventListener('keypress', function(e) {
-            if (liveMonitorActive && isMouseOverScreen) {
+            if (liveMonitorActive && isMouseOverScreen && mouseKeyboardEnabled) {
                 e.preventDefault();
 
                 // Only send printable characters
