@@ -1,10 +1,9 @@
 from flask import Flask, render_template_string, request, session, redirect, url_for
-from flask_socketio import SocketIO, emit
-import asyncio
-import websockets
+from flask_socketio import SocketIO, emit, disconnect
 import json
-import threading
-import time
+import subprocess
+import os
+import asyncio
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'WEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE@!!!!##########@'
@@ -14,7 +13,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 ADMIN_PASSWORD = "AEae123@"
 
 # Store local client connection
-local_client = None
+local_client_sid = None
 local_connected = False
 
 HTML_TEMPLATE = '''
@@ -223,73 +222,50 @@ def index():
     authenticated = session.get('authenticated', False)
     return render_template_string(HTML_TEMPLATE, authenticated=authenticated)
 
+# SocketIO event handlers for web clients
 @socketio.on('execute_command')
-def handle_command(data):
-    global local_client
-    if local_client and local_connected:
+def handle_web_command(data):
+    global local_client_sid, local_connected
+    if local_client_sid and local_connected:
         try:
-            command_data = {
-                'type': 'command',
-                'command': data['command']
-            }
-            asyncio.run_coroutine_threadsafe(
-                local_client.send(json.dumps(command_data)),
-                websocket_loop
-            )
+            # Send command to local client
+            socketio.emit('execute_command', data, room=local_client_sid)
         except Exception as e:
             emit('command_result', {'output': f'Error sending command: {str(e)}'})
     else:
         emit('command_result', {'output': 'Error: Local PC not connected'})
 
-# WebSocket server for local client
-async def handle_local_client(websocket, path):
-    global local_client, local_connected
-
-    print(f"Local client connected from {websocket.remote_address}")
-    local_client = websocket
+# SocketIO event handlers for local client
+@socketio.on('local_client_connect')
+def handle_local_connect():
+    global local_client_sid, local_connected
+    local_client_sid = request.sid
     local_connected = True
+    print(f"Local client connected: {local_client_sid}")
 
-    # Notify web clients
+    # Notify all web clients that local PC is connected
     socketio.emit('local_status', {'connected': True})
 
-    try:
-        async for message in websocket:
-            data = json.loads(message)
-            if data['type'] == 'result':
-                # Send result to web clients
-                socketio.emit('command_result', {
-                    'output': data['output'],
-                    'cwd': data.get('cwd', '')
-                })
-    except websockets.exceptions.ConnectionClosed:
+@socketio.on('command_result')
+def handle_command_result(data):
+    # Forward result from local client to all web clients
+    socketio.emit('command_result', data, broadcast=True)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    global local_client_sid, local_connected
+    if request.sid == local_client_sid:
         print("Local client disconnected")
-    except Exception as e:
-        print(f"Error with local client: {e}")
-    finally:
-        local_client = None
+        local_client_sid = None
         local_connected = False
+        # Notify all web clients that local PC is disconnected
         socketio.emit('local_status', {'connected': False})
-
-# Start WebSocket server in a separate thread
-def start_websocket_server():
-    global websocket_loop
-    websocket_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(websocket_loop)
-
-    start_server = websockets.serve(handle_local_client, "0.0.0.0", 8765)
-    websocket_loop.run_until_complete(start_server)
-    websocket_loop.run_forever()
-
-# Start WebSocket server
-websocket_thread = threading.Thread(target=start_websocket_server, daemon=True)
-websocket_thread.start()
 
 if __name__ == '__main__':
     print("Starting Flask app...")
-    print("WebSocket server will listen on port 8765 for local clients")
+    print("Local clients should connect via SocketIO")
 
     # Use the PORT environment variable provided by Render
-    import os
     port = int(os.environ.get('PORT', 5000))
 
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
