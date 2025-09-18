@@ -679,27 +679,27 @@ def handle_local_connect():
 @socketio.on('command_result')
 def handle_command_result(data):
     # Forward result from local client to all web clients
-    socketio.emit('command_result', data, broadcast=True)
+    socketio.emit('command_result', data)
 
 @socketio.on('screenshot_result')
 def handle_screenshot_result(data):
     # Forward screenshot from local client to all web clients
-    socketio.emit('screenshot_result', data, broadcast=True)
+    socketio.emit('screenshot_result', data)
 
 @socketio.on('live_frame')
 def handle_live_frame(data):
     # Forward live frame from local client to all web clients
-    socketio.emit('live_frame', data, broadcast=True)
+    socketio.emit('live_frame', data)
 
 @socketio.on('processes_result')
 def handle_processes_result(data):
     # Forward process list from local client to all web clients
-    socketio.emit('processes_result', data, broadcast=True)
+    socketio.emit('processes_result', data)
 
 @socketio.on('process_killed')
 def handle_process_killed(data):
     # Forward process kill result from local client to all web clients
-    socketio.emit('process_killed', data, broadcast=True)
+    socketio.emit('process_killed', data)
 
 @socketio.on('disconnect')
 def handle_disconnect():
