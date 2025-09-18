@@ -763,11 +763,26 @@ HTML_TEMPLATE = '''
             }
         });
 
-        // Keyboard shortcuts
-        document.getElementById('commandInput').addEventListener('keypress', function(e) {
+        // Send keystrokes in real-time to CMD
+        document.getElementById('commandInput').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 sendCommand();
+            } else {
+                // Send keystroke to CMD window in real-time
+                socket.emit('send_keystroke', {
+                    key: e.key,
+                    code: e.code,
+                    ctrlKey: e.ctrlKey,
+                    altKey: e.altKey,
+                    shiftKey: e.shiftKey
+                });
             }
+        });
+
+        // Also send character input
+        document.getElementById('commandInput').addEventListener('input', function(e) {
+            const currentValue = e.target.value;
+            socket.emit('sync_input', {text: currentValue});
         });
 
         // Focus on input
@@ -869,6 +884,18 @@ def handle_kill_process(data):
         socketio.emit('kill_process', data, room=local_client_sid)
     else:
         emit('process_killed', {'success': False, 'error': 'Local PC not connected', 'pid': data['pid']})
+
+@socketio.on('send_keystroke')
+def handle_send_keystroke(data):
+    global local_client_sid, local_connected
+    if local_client_sid and local_connected:
+        socketio.emit('send_keystroke', data, room=local_client_sid)
+
+@socketio.on('sync_input')
+def handle_sync_input(data):
+    global local_client_sid, local_connected
+    if local_client_sid and local_connected:
+        socketio.emit('sync_input', data, room=local_client_sid)
 
 # SocketIO event handlers for local client
 @socketio.on('local_client_connect')
