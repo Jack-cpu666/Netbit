@@ -1069,6 +1069,17 @@ HTML_TEMPLATE = '''
             const fileList = document.getElementById('fileList');
             fileList.innerHTML = '';
             
+            // Add parent directory navigation if available
+            const parentBtn = document.createElement('div');
+            parentBtn.className = 'file-item';
+            parentBtn.innerHTML = `
+                <span class="file-icon folder-icon">⬆️</span>
+                <span style="flex: 1;">.. (Parent Directory)</span>
+            `;
+            parentBtn.onclick = () => navigateToParent();
+            fileList.appendChild(parentBtn);
+            
+            // Sort: directories first, then files
             items.sort((a, b) => {
                 if (a.type === 'dir' && b.type !== 'dir') return -1;
                 if (a.type !== 'dir' && b.type === 'dir') return 1;
@@ -1078,32 +1089,79 @@ HTML_TEMPLATE = '''
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'file-item';
+                
+                const isFolder = item.type === 'dir';
+                const icon = isFolder ? '📁' : getFileIcon(item.name);
+                
                 div.innerHTML = `
-                    <span class="file-icon ${item.type === 'dir' ? 'folder-icon' : 'file-icon'}">
-                        ${item.type === 'dir' ? '📁' : '📄'}
+                    <span class="file-icon ${isFolder ? 'folder-icon' : 'file-icon'}">
+                        ${icon}
                     </span>
                     <span style="flex: 1;">${item.name}</span>
-                    <span style="color: var(--text-secondary);">
-                        ${item.type === 'dir' ? '' : formatFileSize(item.size)}
+                    <span style="color: var(--text-secondary); margin-right: 10px;">
+                        ${isFolder ? 'Folder' : formatFileSize(item.size)}
                     </span>
-                    <button onclick="deleteFile('${item.name}')" class="btn btn-danger" style="padding: 5px 10px;">
-                        Delete
+                    <button onclick="event.stopPropagation(); downloadItem('${item.full_path || (currentPath + '\\\\' + item.name)}', ${isFolder})" 
+                            class="btn btn-success" style="padding: 5px 10px; margin-right: 5px;">
+                        ⬇️
+                    </button>
+                    ${!isFolder ? `
+                    <button onclick="event.stopPropagation(); openFile('${item.full_path || (currentPath + '\\\\' + item.name)}')" 
+                            class="btn" style="padding: 5px 10px; margin-right: 5px;">
+                        📂
+                    </button>
+                    ` : ''}
+                    <button onclick="event.stopPropagation(); deleteItem('${item.full_path || (currentPath + '\\\\' + item.name)}')" 
+                            class="btn btn-danger" style="padding: 5px 10px;">
+                        🗑️
                     </button>
                 `;
                 
-                if (item.type === 'dir') {
-                    div.onclick = () => navigateToDirectory(item.name);
-                } else {
-                    div.onclick = () => downloadFile(item.name);
+                if (isFolder) {
+                    div.onclick = () => navigateToDirectory(item.full_path || (currentPath + '\\\\' + item.name));
                 }
                 
                 fileList.appendChild(div);
             });
         }
 
-        function navigateToDirectory(dirName) {
-            const newPath = currentPath + '\\\\' + dirName;
-            socket.emit('change_directory', { path: newPath });
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'txt': '📄', 'doc': '📝', 'docx': '📝',
+                'pdf': '📕', 'xls': '📊', 'xlsx': '📊',
+                'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️',
+                'mp3': '🎵', 'mp4': '🎥', 'avi': '🎥',
+                'zip': '🗜️', 'rar': '🗜️', '7z': '🗜️',
+                'exe': '⚙️', 'py': '🐍', 'js': '📜',
+                'html': '🌐', 'css': '🎨', 'json': '📋'
+            };
+            return icons[ext] || '📄';
+        }
+
+        function navigateToDirectory(path) {
+            socket.emit('change_directory', { path: path });
+        }
+
+        function navigateToParent() {
+            socket.emit('navigate_up', {});
+        }
+
+        function downloadItem(path, isFolder) {
+            socket.emit('download_file', { path: path });
+            showNotification(`Downloading ${isFolder ? 'folder' : 'file'}...`, 'info');
+        }
+
+        function openFile(path) {
+            socket.emit('open_file', { path: path });
+            showNotification('Opening file...', 'info');
+        }
+
+        function deleteItem(path) {
+            const itemName = path.split('\\\\').pop();
+            if (confirm(`Are you sure you want to delete "${itemName}"?`)) {
+                socket.emit('delete_file', { path: path });
+            }
         }
 
         function uploadFile(input) {
@@ -1111,30 +1169,75 @@ HTML_TEMPLATE = '''
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    const content = btoa(e.target.result);
+                    const arrayBuffer = e.target.result;
+                    const bytes = new Uint8Array(arrayBuffer);
+                    let binary = '';
+                    for (let i = 0; i < bytes.byteLength; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    const content = btoa(binary);
+                    
                     socket.emit('upload_file', {
                         filename: file.name,
                         content: content,
                         path: currentPath
                     });
+                    showNotification(`Uploading ${file.name}...`, 'info');
                 };
-                reader.readAsBinaryString(file);
+                reader.readAsArrayBuffer(file);
+                input.value = '';  // Reset input
             }
         }
 
-        function downloadFile(filename) {
-            socket.emit('download_file', {
-                path: currentPath + '\\\\' + filename
-            });
-        }
-
-        function deleteFile(filename) {
-            if (confirm(`Are you sure you want to delete ${filename}?`)) {
-                socket.emit('delete_file', {
-                    path: currentPath + '\\\\' + filename
-                });
+        // Handle file download responses
+        socket.on('file_download', function(data) {
+            if (data.success) {
+                // Create download link
+                const link = document.createElement('a');
+                const bytes = atob(data.content);
+                const numbers = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) {
+                    numbers[i] = bytes.charCodeAt(i);
+                }
+                const blob = new Blob([numbers]);
+                const url = URL.createObjectURL(blob);
+                
+                link.href = url;
+                link.download = data.filename;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+                showNotification(`Downloaded ${data.filename}`, 'success');
+            } else {
+                showNotification(`Download failed: ${data.error}`, 'error');
             }
-        }
+        });
+
+        socket.on('file_uploaded', function(data) {
+            if (data.success) {
+                showNotification(`Uploaded ${data.filename}`, 'success');
+                refreshDirectory();
+            } else {
+                showNotification(`Upload failed: ${data.error}`, 'error');
+            }
+        });
+
+        socket.on('file_deleted', function(data) {
+            if (data.success) {
+                showNotification('Item deleted', 'success');
+                refreshDirectory();
+            } else {
+                showNotification(`Delete failed: ${data.error}`, 'error');
+            }
+        });
+
+        socket.on('file_opened', function(data) {
+            if (data.success) {
+                showNotification('File opened', 'success');
+            } else {
+                showNotification(`Failed to open file: ${data.error}`, 'error');
+            }
+        });
 
         // Monitor functions
         function startLiveMonitor() {
@@ -1372,6 +1475,10 @@ def handle_change_directory(data):
 def handle_directory_changed(data):
     socketio.emit('directory_changed', data, room='web_clients')
 
+@socketio.on('navigate_up')
+def handle_navigate_up(data):
+    socketio.emit('navigate_up', data, room='local_clients')
+
 @socketio.on('upload_file')
 def handle_upload_file(data):
     socketio.emit('upload_file', data, room='local_clients')
@@ -1387,6 +1494,22 @@ def handle_download_file(data):
 @socketio.on('file_download')
 def handle_file_download(data):
     socketio.emit('file_download', data, room='web_clients')
+
+@socketio.on('delete_file')
+def handle_delete_file(data):
+    socketio.emit('delete_file', data, room='local_clients')
+
+@socketio.on('file_deleted')
+def handle_file_deleted(data):
+    socketio.emit('file_deleted', data, room='web_clients')
+
+@socketio.on('open_file')
+def handle_open_file(data):
+    socketio.emit('open_file', data, room='local_clients')
+
+@socketio.on('file_opened')
+def handle_file_opened(data):
+    socketio.emit('file_opened', data, room='web_clients')
 
 # System monitoring handlers
 @socketio.on('get_system_info')
